@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AECC Device Wi-Fi Setup</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #fff; --ink: #1b1f24; --muted: #646d78; --line: #dde1e6;
+    --accent: #0b6bcb; --ok: #1a7f37; --bad: #c4321c; --warn: #9a6700;
+    color-scheme: light;
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #111418; --card: #1a1f25; --ink: #e6e9ed; --muted: #98a2ad; --line: #2c333b;
+      --accent: #4c9ef0; --ok: #4ac26b; --bad: #f47067; --warn: #d4a72c; color-scheme: dark; }
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; background: var(--bg); color: var(--ink); padding: 24px 16px 48px; }
+  main { max-width: 640px; margin: 0 auto; display: grid; gap: 16px; }
+  h1 { font-size: 1.35rem; margin: 0; }
+  .sub { color: var(--muted); margin: 4px 0 0; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+  section h2 { font-size: 1rem; margin: 0 0 12px; display: flex; gap: 8px; align-items: center; }
+  section h2 .n { width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: #fff;
+    font-size: .75rem; display: inline-grid; place-items: center; }
+  section[aria-disabled="true"] { opacity: .5; pointer-events: none; }
+  label { display: block; font-size: .85rem; color: var(--muted); margin: 10px 0 4px; }
+  input, select { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px;
+    background: var(--bg); color: var(--ink); font: inherit; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .row > input { flex: 1 1 200px; width: auto; }
+  button { padding: 8px 14px; border-radius: 6px; border: 1px solid var(--accent); background: var(--accent);
+    color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
+  button.secondary { background: transparent; color: var(--accent); }
+  button:disabled { opacity: .5; cursor: default; }
+  .networks { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: 6px;
+    max-height: 260px; overflow: auto; }
+  .networks li { display: flex; justify-content: space-between; padding: 8px 10px; cursor: pointer;
+    border-bottom: 1px solid var(--line); }
+  .networks li:last-child { border-bottom: 0; }
+  .networks li[aria-selected="true"] { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+  .networks .rssi { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .status { display: grid; gap: 6px; }
+  .status div { display: flex; gap: 8px; }
+  .status b { min-width: 110px; font-weight: 600; }
+  #device-info { margin-top: 12px; }
+  .ok { color: var(--ok); } .bad { color: var(--bad); } .pending { color: var(--warn); }
+  details summary { cursor: pointer; color: var(--muted); font-size: .9rem; }
+  #log { font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; max-height: 260px; overflow: auto;
+    white-space: pre-wrap; word-break: break-all; margin: 8px 0 0; color: var(--muted); }
+  #log .tx { color: var(--accent); } #log .rx { color: var(--ok); } #log .err { color: var(--bad); }
+  .banner { padding: 10px 12px; border-radius: 6px; border: 1px solid var(--bad); color: var(--bad); }
+  .hint { font-size: .85rem; color: var(--muted); margin: 8px 0 0; }
+  label.check { display: flex; gap: 6px; align-items: center; color: var(--ink); }
+  label.check input { width: auto; }
+  fieldset.server { border: 1px solid var(--line); border-radius: 6px; margin: 14px 0 0; padding: 4px 12px 12px; }
+  fieldset.server legend { font-size: .85rem; color: var(--muted); padding: 0 4px; }
+  fieldset.server label.check { margin-top: 6px; }
+  input[readonly] { opacity: .7; }
+  .server-row { align-items: flex-end; }
+  .hint.warn { color: var(--warn); }
+  .server-row .grow { flex: 1 1 220px; }
+  .server-row .port { flex: 0 1 110px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>AECC Device Wi-Fi Setup</h1>
+    <p class="sub">Web Bluetooth replacement for the Wi-Fi provisioning in AECC Devices.</p>
+  </header>
+
+  <div id="unsupported" class="banner" hidden></div>
+
+  <section id="s-connect">
+    <h2><span class="n">1</span>Connect to the AECC device</h2>
+    <div class="row">
+      <button id="btn-connect">Scan &amp; connect</button>
+      <button id="btn-disconnect" class="secondary" hidden>Disconnect</button>
+      <span id="conn-state" class="pending"></span>
+    </div>
+    <div class="status" id="device-info" hidden>
+      <div><b>Device</b><span id="di-name">—</span></div>
+      <div><b>Group</b><span id="di-group">—</span></div>
+      <div><b>Type code</b><span id="di-type">—</span></div>
+      <div><b>Writes to</b><span id="di-write">—</span></div>
+    </div>
+  </section>
+
+  <section id="s-wifi" aria-disabled="true">
+    <h2><span class="n">2</span>Choose a Wi-Fi network</h2>
+    <p class="hint" id="current-ssid"></p>
+    <ul class="networks" id="networks"></ul>
+    <div class="row" style="margin-top:8px">
+      <button id="btn-rescan" class="secondary">Rescan networks</button>
+      <label class="check"><input type="checkbox" id="show-5g"> Show 5 GHz-looking names</label>
+    </div>
+    <label for="ssid">Network name (SSID)</label>
+    <input id="ssid" autocomplete="off" spellcheck="false">
+    <label for="pwd">Password</label>
+    <div class="row">
+      <input id="pwd" type="password" autocomplete="off">
+      <button id="btn-showpwd" class="secondary" type="button">Show</button>
+    </div>
+    <fieldset class="server">
+      <legend>Server settings</legend>
+      <label for="p17">MQTT host (setting 17)</label>
+      <input id="p17" autocomplete="off" spellcheck="false" readonly>
+      <label class="check"><input type="checkbox" id="upd-mqtt"> Update MQTT host</label>
+      <p class="hint" id="hint-mqtt">Not read yet.</p>
+      <p class="hint warn" id="warn-mqtt" hidden></p>
+
+      <div class="row server-row">
+        <div class="grow">
+          <label for="p19">Server address (setting 19)</label>
+          <input id="p19" autocomplete="off" spellcheck="false" readonly>
+        </div>
+        <div class="port">
+          <label for="p18">Port (setting 18)</label>
+          <input id="p18" inputmode="numeric" autocomplete="off" readonly>
+        </div>
+      </div>
+      <label class="check"><input type="checkbox" id="upd-server"> Update server address and port</label>
+      <p class="hint" id="hint-server">Not read yet.</p>
+      <p class="hint">Values are read from the device on connect and only written when their box is
+        ticked. Host names only: no scheme (mqtt://, http://), port or path.</p>
+    </fieldset>
+    <div class="row" style="margin-top:12px">
+      <button id="btn-send">Send to AECC device</button>
+    </div>
+    <p class="hint">The AECC device only supports 2.4 GHz Wi-Fi.</p>
+  </section>
+
+  <section id="s-status" aria-disabled="true">
+    <h2><span class="n">3</span>Status</h2>
+    <div class="status">
+      <div><b>Wi-Fi</b><span id="st-wifi">—</span></div>
+      <div><b>Cloud server</b><span id="st-server">—</span></div>
+    </div>
+    <p class="hint" id="st-hint"></p>
+    <div class="row" style="margin-top:10px">
+      <button id="btn-recheck" class="secondary">Check status again</button>
+      <span class="hint" style="margin:0">Read-only: re-reads settings 55 and 60, changes nothing.</span>
+    </div>
+  </section>
+
+  <section>
+    <h2>Protocol log</h2>
+    <pre id="log"></pre>
+  </section>
+</main>
+<script>
+  // Classic script, so it still runs when the module below is blocked
+  // (Chrome refuses module scripts from file:// URLs).
+  window.addEventListener('load', () => {
+    if (window.__appLoaded) return;
+    const b = document.getElementById('unsupported');
+    b.hidden = false;
+    b.textContent = location.protocol === 'file:'
+      ? 'This page was opened as a file, so the browser blocks its scripts. Run "npm start" in the web-ble-wifi folder and open http://localhost:8000/ instead.'
+      : 'The page script failed to load. Check the browser console for details.';
+    document.getElementById('btn-connect').disabled = true;
+  });
+</script>
+<script type="module" src="./app.js"></script>
+</body>
+</html>
